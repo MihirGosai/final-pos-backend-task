@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Cart, CartDocument } from './schemas/cart.schema';
 import { CreateCartDto } from './dto/create-cart.dto';
 import { UpdateCartDto } from './dto/update-cart.dto';
@@ -17,25 +17,41 @@ export class CartService {
 
   // Create a new cart and validate products
   async create(createCartDto: CreateCartDto): Promise<Cart> {
-    for (const item of createCartDto.items) {
-      const response = await axios.get<ProductResponse>(
-        `http://localhost:3000/products/${item.productId}`,
-      );
-      const product = response.data;
+    let total = 0;
 
-      if (!product || product.stock < item.quantity) {
+    for (const item of createCartDto.items) {
+      let product: ProductResponse;
+      try {
+        const response = await axios.get<ProductResponse>(
+          `http://localhost:3000/products/${item.productId}`,
+        );
+        product = response.data;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (err) {
         throw new BadRequestException(
-          `Insufficient stock for product ${item.productId}`,
+          `Product with ID "${item.productId}" not found.`,
         );
       }
 
-      // Optionally update stock (example PUT request)
+      if (product.stock < item.quantity) {
+        throw new BadRequestException(
+          `Insufficient stock for product "${product.name}". Available: ${product.stock}, Requested: ${item.quantity}`,
+        );
+      }
+
+      total += product.price * item.quantity;
+
       await axios.put(`http://localhost:3000/products/${item.productId}`, {
         stock: product.stock - item.quantity,
       });
     }
 
-    const cart = new this.cartModel(createCartDto);
+    const cart = new this.cartModel({
+      userId: createCartDto.userId,
+      items: createCartDto.items,
+      total,
+    });
+
     return cart.save();
   }
 
@@ -58,20 +74,65 @@ export class CartService {
     return cart;
   }
 
-  // Update cart (without rechecking stock for simplicity)
+  // Update cart and re-validate products
   async update(id: string, updateCartDto: UpdateCartDto): Promise<Cart> {
-    const cart = await this.cartModel.findByIdAndUpdate(id, updateCartDto, {
-      new: true,
-      runValidators: true,
-    });
+    const existing = await this.cartModel.findById(id).exec();
 
-    if (!cart) {
+    if (!existing) {
       throw new NotFoundException(`Cart with ID "${id}" not found`);
     }
 
-    return cart;
-  }
+    let total = existing.total;
 
+    // Re-validate items if provided
+    if (updateCartDto.items) {
+      total = 0;
+
+      for (const item of updateCartDto.items as {
+        productId: string;
+        quantity: number;
+      }[]) {
+        let product: ProductResponse;
+
+        try {
+          const response = await axios.get<ProductResponse>(
+            `http://localhost:3000/products/${item.productId}`,
+          );
+          product = response.data;
+        } catch (err) {
+          throw new BadRequestException(
+            `Product with ID "${item.productId}" not found`,
+          );
+        }
+
+        if (product.stock < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for product "${product.name}". Available: ${product.stock}, requested: ${item.quantity}`,
+          );
+        }
+
+        total += product.price * item.quantity;
+
+        await axios.put(`http://localhost:3000/products/${item.productId}`, {
+          stock: product.stock - item.quantity,
+        });
+      }
+
+      // Safe ObjectId assignment
+      existing.items = updateCartDto.items.map((item) => ({
+        productId: new Types.ObjectId(item.productId),
+        quantity: item.quantity,
+      }));
+    }
+
+    if (updateCartDto.userId) {
+      existing.userId = updateCartDto.userId;
+    }
+
+    existing.total = total;
+
+    return existing.save();
+  }
   // Delete a cart
   async remove(id: string): Promise<void> {
     const result = await this.cartModel.findByIdAndDelete(id).exec();

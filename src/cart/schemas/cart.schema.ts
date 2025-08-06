@@ -8,16 +8,21 @@ export class Cart {
   @Prop({ required: true })
   userId: string;
 
-  @Prop([
-    {
-      productId: { type: Types.ObjectId, ref: 'Product', required: true },
-      quantity: { type: Number, required: true, min: 1 },
-    },
-  ])
+  @Prop({
+    type: [
+      {
+        productId: { type: Types.ObjectId, ref: 'Product', required: true },
+        quantity: { type: Number, required: true, min: 1 },
+      },
+    ],
+  })
   items: {
     productId: Types.ObjectId;
     quantity: number;
   }[];
+
+  @Prop({ required: true })
+  total: number;
 }
 
 export const CartSchema = SchemaFactory.createForClass(Cart);
