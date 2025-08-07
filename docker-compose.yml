@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: final-pos-backend
+    restart: always
+    ports:
+      - '${PORT}:3000'
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+    volumes:
+      - .:/app
+    command: npm run start:prod
+
+  mongo:
+    image: mongo:6
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
