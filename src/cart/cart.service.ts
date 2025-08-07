@@ -140,4 +140,28 @@ export class CartService {
       throw new NotFoundException(`Cart with ID "${id}" not found`);
     }
   }
+
+  async removeProductFromCart(
+    cartId: string,
+    productId: string,
+  ): Promise<Cart> {
+    const cart = await this.cartModel.findById(cartId);
+
+    if (!cart) {
+      throw new NotFoundException(`Cart with ID "${cartId}" not found`);
+    }
+
+    const initialLength = cart.items.length;
+    cart.items = cart.items.filter(
+      (item) => item.productId.toString() !== productId,
+    );
+
+    if (cart.items.length === initialLength) {
+      throw new NotFoundException(
+        `Product with ID "${productId}" not found in cart`,
+      );
+    }
+
+    return cart.save();
+  }
 }

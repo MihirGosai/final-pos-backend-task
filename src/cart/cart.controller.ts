@@ -58,4 +58,16 @@ export class CartController {
   async remove(@Param('id') id: string): Promise<void> {
     return this.cartService.remove(id);
   }
+
+  @Delete(':cartId/items/:productId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a product from a cart' })
+  @ApiResponse({ status: 200, description: 'Product removed from cart' })
+  @ApiResponse({ status: 404, description: 'Cart or product not found' })
+  async removeProductFromCart(
+    @Param('cartId') cartId: string,
+    @Param('productId') productId: string,
+  ): Promise<Cart> {
+    return this.cartService.removeProductFromCart(cartId, productId);
+  }
 }
